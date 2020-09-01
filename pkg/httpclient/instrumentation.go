@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 func requestDuration(histogram *prometheus.HistogramVec, name, scheme, host, path, method string, status int, startTime time.Time) {
@@ -36,6 +37,29 @@ func NewInstrumentation(histogram *prometheus.HistogramVec, name string, c *http
 	}
 
 	std.Transport = instrumentRoundTripper(histogram, name, transport)
+
+	return c
+}
+
+// NewWithDefaultInstrumentation .
+func NewWithDefaultInstrumentation(name string, c *http.Client) *http.Client {
+	std := &http.Client{Timeout: 30 * time.Second}
+	transport := http.DefaultTransport
+	if c != nil {
+		std = c
+
+		if std.Transport != nil {
+			transport = std.Transport
+		}
+	}
+
+	var metric = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "outgoing_http_request_duration_seconds",
+		Help:    "observe elapsed time in seconds for a outgoing request",
+		Buckets: []float64{0.5, 1, 15, 30, 60},
+	}, []string{"name", "scheme", "host", "path", "method", "code"})
+
+	std.Transport = instrumentRoundTripper(metric, name, transport)
 
 	return c
 }
