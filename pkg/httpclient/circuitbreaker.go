@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -91,7 +92,7 @@ func DefaultCircuitBreaker(name string) *gobreaker.CircuitBreaker {
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
 			// do smth when circuit breaker trips.
-			stdlog.Out().Print("circuit [%s] change state %s --> %s", name, from, to)
+			stdlog.Out().Print(fmt.Sprintf("circuit [%s] change state %s --> %s", name, from, to))
 		},
 	}
 
