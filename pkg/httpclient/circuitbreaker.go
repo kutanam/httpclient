@@ -92,7 +92,7 @@ func DefaultCircuitBreaker(name string) *gobreaker.CircuitBreaker {
 		},
 		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
 			// do smth when circuit breaker trips.
-			stdlog.Out().Print(fmt.Sprintf("circuit [%s] change state %s --> %s", name, from, to))
+			stdlog.Out().Print(fmt.Sprintf("circuit [%s] change state from %s to %s", name, from, to))
 		},
 	}
 
