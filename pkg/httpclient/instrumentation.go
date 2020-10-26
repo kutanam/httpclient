@@ -3,29 +3,52 @@ package httpclient
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-func requestDuration(histogram *prometheus.HistogramVec, name, scheme, host, path, method string, status int, startTime time.Time) {
-	duration := time.Since(startTime)
+// ObserveOption .
+type ObserveOption func(name string, r *http.Request, w *http.Response) prometheus.Labels
 
-	histogram.With(
-		prometheus.Labels{
+// DefaultObserveOption .
+func DefaultObserveOption(name string, r *http.Request, w *http.Response) prometheus.Labels {
+	return map[string]string{
+		"name":   name,
+		"scheme": r.URL.Scheme,
+		"host":   r.URL.Host,
+		"path":   r.URL.Path,
+		"method": r.Method,
+		"code":   fmt.Sprint(w.StatusCode),
+	}
+}
+
+// RegexedObserveOption .
+func RegexedObserveOption(regs map[string]string) func(name string, r *http.Request, w *http.Response) prometheus.Labels {
+	return func(name string, r *http.Request, w *http.Response) prometheus.Labels {
+		path := r.URL.Path
+		for reg, p := range regs {
+			match, _ := regexp.MatchString(reg, r.URL.Path)
+			if match {
+				path = p
+			}
+		}
+
+		return map[string]string{
 			"name":   name,
-			"scheme": scheme,
-			"host":   host,
+			"scheme": r.URL.Scheme,
+			"host":   r.URL.Host,
 			"path":   path,
-			"method": method,
-			"code":   fmt.Sprint(status),
-		},
-	).Observe(duration.Seconds())
+			"method": r.Method,
+			"code":   fmt.Sprint(w.StatusCode),
+		}
+	}
 }
 
 // NewInstrumentation .
-func NewInstrumentation(histogram *prometheus.HistogramVec, name string, c *http.Client) *http.Client {
+func NewInstrumentation(histogram *prometheus.HistogramVec, name string, c *http.Client, opts ...ObserveOption) *http.Client {
 	std := &http.Client{Timeout: 30 * time.Second}
 	transport := http.DefaultTransport
 	if c != nil {
@@ -36,7 +59,11 @@ func NewInstrumentation(histogram *prometheus.HistogramVec, name string, c *http
 		}
 	}
 
-	std.Transport = instrumentRoundTripper(histogram, name, transport)
+	if len(opts) == 0 {
+		opts = append(opts, DefaultObserveOption)
+	}
+
+	std.Transport = instrumentRoundTripper(histogram, name, transport, opts...)
 
 	return c
 }
@@ -53,23 +80,31 @@ func NewWithDefaultInstrumentation(name string, c *http.Client) *http.Client {
 		}
 	}
 
-	var metric = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	hv := promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "outgoing_http_request_duration_seconds",
 		Help:    "observe elapsed time in seconds for a outgoing request",
 		Buckets: []float64{0.5, 1, 15, 30, 60},
 	}, []string{"name", "scheme", "host", "path", "method", "code"})
 
-	std.Transport = instrumentRoundTripper(metric, name, transport)
+	std.Transport = instrumentRoundTripper(hv, name, transport, DefaultObserveOption)
 
 	return c
 }
 
-func instrumentRoundTripper(histogram *prometheus.HistogramVec, name string, next http.RoundTripper) RoundTripperFunc {
-	return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+func instrumentRoundTripper(hv *prometheus.HistogramVec, name string, next http.RoundTripper, opts ...ObserveOption) RoundTripperFunc {
+	return RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		now := time.Now()
-		res, err := next.RoundTrip(r)
+		res, err := next.RoundTrip(req)
 		if err == nil {
-			requestDuration(histogram, name, r.URL.Scheme, r.URL.Host, r.URL.Path, r.Method, res.StatusCode, now)
+			var labels map[string]string
+			for _, opt := range opts {
+				labels = opt(name, req, res)
+			}
+
+			obs, _ := hv.GetMetricWith(labels)
+			if obs != nil {
+				obs.Observe(time.Since(now).Seconds())
+			}
 		}
 
 		return res, err
