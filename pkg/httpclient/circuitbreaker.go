@@ -124,7 +124,7 @@ func circuitBreakerRoundTripper(cb *gobreaker.CircuitBreaker, failedExecutionSta
 			if res != nil {
 				for _, status := range failedExecutionStatus {
 					if res.StatusCode == status {
-						return res, errors.Errorf("ERR EXEC (%s) [%d] %s _ %s%s", cb.Name(), res.StatusCode, req.Method, req.URL.Host, req.URL.Path)
+						return nil, errors.Errorf("ERR EXEC (%s) [%d] %s _ %s%s", cb.Name(), res.StatusCode, req.Method, req.URL.Host, req.URL.Path)
 					}
 				}
 			}
