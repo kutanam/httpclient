@@ -25,7 +25,10 @@ func DefaultObserveOption(name string, r *http.Request, w *http.Response) promet
 	}
 }
 
-// RegexedObserveOption .
+// RegexedObserveOption option add regex format for changing unique url path into general one.
+// Make sure to sort regex descending (longest to shortest)
+//
+// `ex: /user/123 to /user/{userId}`
 func RegexedObserveOption(regs map[string]string) func(name string, r *http.Request, w *http.Response) prometheus.Labels {
 	return func(name string, r *http.Request, w *http.Response) prometheus.Labels {
 		path := r.URL.Path
