@@ -33,6 +33,7 @@ func RegexedObserveOption(regs map[string]string) func(name string, r *http.Requ
 			match, _ := regexp.MatchString(reg, r.URL.Path)
 			if match {
 				path = p
+				break
 			}
 		}
 
