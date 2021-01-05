@@ -54,7 +54,7 @@ func Test_RegexedObserveOption_Descending(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", host, tc.path), nil)
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s", host, tc.path), nil)
 			fn := httpclient.RegexedObserveOption(sampleRegex)
 
 			result := fn("example", req, &http.Response{StatusCode: http.StatusOK})
@@ -105,7 +105,58 @@ func Test_RegexedObserveOption_Ascending(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", host, tc.path), nil)
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s", host, tc.path), nil)
+			fn := httpclient.RegexedObserveOption(sampleRegex)
+
+			result := fn("example", req, &http.Response{StatusCode: http.StatusOK})
+			if diff := cmp.Diff(tc.expectedRes, result); diff != "" {
+				t.Fatalf("[%s] mismatch (-want +got):\n%s", t.Name(), diff)
+			}
+		})
+	}
+}
+
+func Test_RegexedObserveOption_ExtraPathAsServiceName(t *testing.T) {
+	host := "https://example.com/payfazz-service/abc"
+	uniqueUserID := strings.ReplaceAll(fmt.Sprint(regexp.QuoteMeta("/user/"), `\d?.+`), `/`, `\/`)
+	subserviceAfterUniqueUserID := strings.ReplaceAll(fmt.Sprint(regexp.QuoteMeta("/user/"), `\d?.+`, `/subservice`), `/`, `\/`)
+
+	sampleRegex := map[string]string{
+		uniqueUserID:                "/user/{userId}",
+		subserviceAfterUniqueUserID: "/user/{userId}/subservice",
+	}
+
+	cases := map[string]struct {
+		expectedRes prometheus.Labels
+		path        string
+	}{
+		"unique id": {
+			path: "/user/123",
+			expectedRes: map[string]string{
+				"name":   "example",
+				"scheme": "https",
+				"host":   "example.com",
+				"path":   "/payfazz-service/abc/user/{userId}",
+				"method": http.MethodGet,
+				"code":   fmt.Sprint(http.StatusOK),
+			},
+		},
+		"will alywas match shortest regex first": {
+			path: "/user/123/subservice/subservice2",
+			expectedRes: map[string]string{
+				"name":   "example",
+				"scheme": "https",
+				"host":   "example.com",
+				"path":   "/payfazz-service/abc/user/{userId}",
+				"method": http.MethodGet,
+				"code":   fmt.Sprint(http.StatusOK),
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s", host, tc.path), nil)
 			fn := httpclient.RegexedObserveOption(sampleRegex)
 
 			result := fn("example", req, &http.Response{StatusCode: http.StatusOK})

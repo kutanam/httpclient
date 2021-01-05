@@ -25,17 +25,20 @@ func DefaultObserveOption(name string, r *http.Request, w *http.Response) promet
 	}
 }
 
-// RegexedObserveOption option add regex format for changing unique url path into general one.
+// RegexedObserveOption option add regex format for changing unique url path into general one,
+// with keep other path that not provided on regex such as extra path on URL like`secure.payfazz.com/service-name`.
+// Usually service-name will be generated when creating domain.
 // Make sure to sort regex descending (longest to shortest)
 //
+// `ex:` /service-name/user/123 to /service-name/user/{userId}
 // `ex: /user/123 to /user/{userId}`
 func RegexedObserveOption(regs map[string]string) func(name string, r *http.Request, w *http.Response) prometheus.Labels {
 	return func(name string, r *http.Request, w *http.Response) prometheus.Labels {
 		path := r.URL.Path
 		for reg, p := range regs {
-			match, _ := regexp.MatchString(reg, r.URL.Path)
-			if match {
-				path = p
+			regex := regexp.MustCompile(reg)
+			if regex.MatchString(path) {
+				path = regex.ReplaceAllString(path, p)
 				break
 			}
 		}
